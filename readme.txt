@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,17 +26,21 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.0.5 =
+* Add traffic channels widget: search engines, social networks, referral websites, direct, paid ads, email and UTM campaigns.
+* Retroactive session attribution from stored referrer and UTM data, no database migration.
+* Integrate WPR Update Hub SDK v2; preserves independent visitor tracking.
+* Identify Yandex Browser separately from Chrome.
+* Show native WP auto-update toggle without forcing auto-update on, including when hub has no new release.
+
 = 1.0.4 =
-* Migrate plugin updates to WPR Update Hub v1.1.
-* Add optional, consent-based anonymous installation statistics.
+* Add WPR Update Hub client v2 for WordPress native plugin updates.
 
 = 1.0.3 =
-* Add a Today date preset on the statistics dashboard.
-* Show interactive date and metric value tooltips on chart hover and keyboard focus.
+* Add Today preset and interactive chart tooltips.
 
 = 1.0.2 =
-* Add secure GitHub Releases update checks and one-click WordPress upgrades.
-* No changes to visitor tracking, reports, or stored statistics.
+* Add GitHub release checks (superseded by WPR Hub in 1.0.4).
 
 = 1.0.1 =
 * Fix zero visitor and pageview columns on the WordPress post/page/CPT list screens.

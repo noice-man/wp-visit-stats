@@ -108,7 +108,10 @@ final class WPVS_Core {
     private static function ua_info($agent) {
         $ua=strtolower($agent);
         $device=preg_match('/ipad|tablet|kindle|silk/i',$ua)?'tablet':(preg_match('/mobile|android|iphone|ipod/i',$ua)?'mobile':'desktop');
-        if (strpos($ua,'edg/')!==false) { $browser='Edge'; }
+        // Chromium-based Yandex Browser contains Chrome/, so match its own
+        // tokens before the generic Chrome branch (desktop and mobile UAs).
+        if (strpos($ua,'yabrowser/')!==false || strpos($ua,'yandexbrowser/')!==false) { $browser='Яндекс Браузер'; }
+        elseif (strpos($ua,'edg/')!==false) { $browser='Edge'; }
         elseif (strpos($ua,'opr/')!==false || strpos($ua,'opera')!==false) { $browser='Opera'; }
         elseif (strpos($ua,'firefox/')!==false) { $browser='Firefox'; }
         elseif (strpos($ua,'chrome/')!==false || strpos($ua,'crios/')!==false) { $browser='Chrome'; }

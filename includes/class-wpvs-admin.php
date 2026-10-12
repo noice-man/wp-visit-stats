@@ -197,7 +197,7 @@ final class WPVS_Admin {
     }
     private static function breakdown($field,$from,$to) {
         global $wpdb;
-        if (!in_array($field,array('device','ref_domain','utm_source'),true)) {return array();}
+        if (!in_array($field,array('device','browser','ref_domain','utm_source'),true)) {return array();}
         return $wpdb->get_results($wpdb->prepare('SELECT '.$field.' label, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s GROUP BY '.$field.' ORDER BY views DESC LIMIT 8',$from,$to),ARRAY_A);
     }
     private static function recent($from,$to) {
@@ -244,11 +244,39 @@ final class WPVS_Admin {
             echo '<tr><td>'.($link?'<a href="'.esc_url($link).'">'.esc_html($title).'</a>':esc_html($title)).'</td><td>'.esc_html(number_format_i18n((int)$item['visitors'])).'</td><td>'.esc_html(number_format_i18n((int)$item['views'])).'</td></tr>';
         }
         echo '</tbody></table></section>';
+        // Sessions are assigned by the first registered hit in each session,
+        // not by each pageview referrer (which would count internal navigation).
+        $traffic=WPVS_Traffic::query($from,$to);
+        echo '<section class="wpvs-panel wpvs-sources"><div class="wpvs-panel-top"><h2>Источники трафика</h2><span class="wpvs-sources-total">'.esc_html(number_format_i18n($traffic['total'])).' сеансов</span></div>';
+        echo '<p class="description">Канал определяется по UTM-меткам и источнику первого зафиксированного просмотра сеанса. Данные за выбранный период, включая ранее накопленную историю.</p>';
+        if (!$traffic['total']) {
+            echo '<p class="wpvs-empty">За выбранный период пока нет сеансов.</p>';
+        } else {
+            echo '<div class="wpvs-source-list">';
+            foreach ($traffic['channels'] as $channel) {
+                $n=(int)$channel['sessions'];
+                if (!$n) {continue;}
+                $share=100*$n/$traffic['total'];
+                $width=max(0,min(100,$share));
+                echo '<div class="wpvs-source"><div class="wpvs-source-head"><strong>'.esc_html($channel['title']).'</strong><span>'.esc_html(number_format_i18n($n)).' сеансов · '.esc_html(number_format_i18n($share,1)).'%</span></div>';
+                echo '<div class="wpvs-source-bar" role="meter" aria-label="'.esc_attr($channel['title']).'" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'.esc_attr(round($width,1)).'"><span class="wpvs-source-fill wpvs-source-'.esc_attr($channel['key']).'" style="width:'.esc_attr(round($width,2)).'%"></span></div>';
+                if (!empty($channel['sources']) && $channel['key']!=='direct') {
+                    echo '<details class="wpvs-source-details"><summary>Показать источники</summary><table class="widefat striped"><thead><tr><th>Источник</th><th>Сеансы</th></tr></thead><tbody>';
+                    foreach (array_slice($channel['sources'],0,15,true) as $source=>$count) {
+                        echo '<tr><td>'.esc_html($source).'</td><td>'.esc_html(number_format_i18n((int)$count)).'</td></tr>';
+                    }
+                    echo '</tbody></table></details>';
+                }
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+        echo '<p class="wpvs-small">Прямые заходы также включают переходы без переданного браузером Referrer. UTM-разметка может переопределять канал; поиск и соцсети определяются по известным доменам. Классификация старых событий не требует миграции БД.</p></section>';
         echo '<div class="wpvs-breakdowns">';
-        foreach (array('device'=>'Устройства','ref_domain'=>'Источники переходов','utm_source'=>'UTM source') as $field=>$label) {
+        foreach (array('device'=>'Устройства','browser'=>'Браузеры','ref_domain'=>'Домены Referrer (все просмотры)','utm_source'=>'UTM source') as $field=>$label) {
             echo '<section class="wpvs-panel"><h2>'.esc_html($label).'</h2><table class="widefat striped"><tbody>';
             foreach (self::breakdown($field,$from,$to) as $row) {
-                echo '<tr><td>'.esc_html($row['label'] ?: ($field==='device'?'Не определено':'Прямые / не указано')).'</td><td class="wpvs-numeric">'.esc_html(number_format_i18n((int)$row['views'])).'</td></tr>';
+                echo '<tr><td>'.esc_html($row['label'] ?: (in_array($field,array('device','browser'),true)?'Не определено':'Прямые / не указано')).'</td><td class="wpvs-numeric">'.esc_html(number_format_i18n((int)$row['views'])).'</td></tr>';
             }
             echo '</tbody></table></section>';
         }
