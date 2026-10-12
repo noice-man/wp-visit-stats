@@ -4,7 +4,7 @@
  * Plugin URI: https://ворд-пресс.рф/plugins/wp-visit-stats/
  * Update URI: https://xn----ctbgf6biedka.xn--p1ai/plugins/wp-visit-stats/
  * Description: Автономная статистика WordPress: посетители, сеансы, просмотры и посещаемость материалов. Резервная базовая аналитика при сбоях Яндекс Метрики.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: Valery Molodtsov
  * Author URI: https://ворд-пресс.рф/
  * License: GPL-2.0-or-later
@@ -13,7 +13,7 @@
  * Requires PHP: 7.4
  */
 if (!defined('ABSPATH')) { exit; }
-define('WPVS_VERSION', '1.0.6');
+define('WPVS_VERSION', '1.0.7');
 define('WPVS_FILE', __FILE__);
 define('WPVS_DIR', plugin_dir_path(__FILE__));
 define('WPVS_URL', plugin_dir_url(__FILE__));
