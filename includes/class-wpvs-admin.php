@@ -213,6 +213,9 @@ final class WPVS_Admin {
         echo '<form method="get" class="wpvs-filter"><input type="hidden" name="page" value="wp-visit-stats" />';
         echo '<label>С <input type="date" required name="wpvs_from" value="'.esc_attr($from).'" /></label> <label>По <input type="date" required name="wpvs_to" value="'.esc_attr($to).'" /></label> ';
         echo '<button type="submit" class="button button-primary">Показать</button> ';
+        $today=(new DateTimeImmutable('now',wp_timezone()))->format('Y-m-d');
+        $today_url=add_query_arg(array('page'=>'wp-visit-stats','wpvs_from'=>$today,'wpvs_to'=>$today),admin_url('admin.php'));
+        echo '<a class="button'.($from===$today && $to===$today?' button-primary':'').'" href="'.esc_url($today_url).'">Сегодня</a> ';
         foreach (array(7,30,90) as $count) {
             $dt=new DateTimeImmutable('now',wp_timezone());
             $url=add_query_arg(array('page'=>'wp-visit-stats','wpvs_from'=>$dt->modify('-'.($count-1).' days')->format('Y-m-d'),'wpvs_to'=>$dt->format('Y-m-d')),admin_url('admin.php'));
