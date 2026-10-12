@@ -4,12 +4,12 @@
 
 Плагин не требует внешней аналитической платформы, ключей API или CDN: браузерный скрипт отправляет события в WordPress, где они сохраняются в собственной таблице базы данных.
 
-**Автор:** Valery Molodtsov · **Лицензия:** GPL-2.0-or-later · **Версия:** 1.0.2 · **WordPress:** 6.0+ · **PHP:** 7.4+
+**Автор:** Valery Molodtsov · **Лицензия:** GPL-2.0-or-later · **Версия:** 1.0.3 · **WordPress:** 6.0+ · **PHP:** 7.4+
 
 - **Страница плагина:** https://ворд-пресс.рф/plugins/wp-visit-stats/
 - **Подробная инструкция:** https://ворд-пресс.рф/solutions/wp-visit-stats-wordpress-setup/
 - **Исходники:** https://github.com/noice-man/wp-visit-stats
-- **Скачать релиз:** [https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.2.zip](https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.2.zip)
+- **Скачать релиз:** [https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.3.zip](https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.3.zip)
 
 ## Исправление статистики материалов в версии 1.0.1
 
@@ -31,7 +31,7 @@
 
 ## Быстрая установка
 
-1. Скачайте **[установочный ZIP](https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.2.zip)** и установите через WordPress → Плагины → Добавить новый → Загрузить плагин.
+1. Скачайте **[установочный ZIP](https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.3.zip)** и установите через WordPress → Плагины → Добавить новый → Загрузить плагин.
 2. Откройте «Статистика визитов».
 3. Проверьте тестовое посещение в приватном окне (администраторы исключены по умолчанию).
 4. Установите желаемый срок хранения, разберитесь с требованиями согласия и подключите баннер, если он нужен.
