@@ -2,8 +2,9 @@
 /**
  * Plugin Name: WP Visit Stats
  * Plugin URI: https://ворд-пресс.рф/plugins/wp-visit-stats/
+ * Update URI: https://github.com/noice-man/wp-visit-stats/
  * Description: Автономная статистика WordPress: посетители, сеансы, просмотры и посещаемость материалов. Резервная базовая аналитика при сбоях Яндекс Метрики.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Valery Molodtsov
  * Author URI: https://ворд-пресс.рф/
  * License: GPL-2.0-or-later
@@ -12,7 +13,7 @@
  * Requires PHP: 7.4
  */
 if (!defined('ABSPATH')) { exit; }
-define('WPVS_VERSION', '1.0.1');
+define('WPVS_VERSION', '1.0.2');
 define('WPVS_FILE', __FILE__);
 define('WPVS_DIR', plugin_dir_path(__FILE__));
 define('WPVS_URL', plugin_dir_url(__FILE__));
@@ -24,3 +25,15 @@ add_action('plugins_loaded', function () {
     WPVS_Core::boot();
     if (is_admin()) { WPVS_Admin::boot(); }
 });
+
+/** GitHub release asset updater (library bundled in distribution ZIP). */
+$puc_file = plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+if ( is_readable( $puc_file ) ) {
+    require_once $puc_file;
+    $puc_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+        'https://github.com/noice-man/wp-visit-stats/',
+        __FILE__,
+        'wp-visit-stats'
+    );
+    $puc_checker->getVcsApi()->enableReleaseAssets( '/^wp-visit-stats-v[0-9]+\.[0-9]+\.[0-9]+\.zip$/i' );
+}
