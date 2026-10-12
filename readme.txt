@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,9 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.0.7 =
+* WPR Updates Client SDK 1.1.2: refresh Hub metadata during explicit WordPress manual update checks while retaining background caching and ETag.
+
 = 1.0.6 =
 * Add first-party goal events, an admin goals report, and opt-in mirroring of Yandex Metrika JavaScript reachGoal calls.
 * Do not collect reachGoal parameters; honor first-party consent, DNT, and event retention.
