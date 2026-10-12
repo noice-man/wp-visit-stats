@@ -120,6 +120,69 @@ final class WPVS_Core {
         if (!$agent) { return true; }
         return (bool)preg_match('/bot|spider|crawl|slurp|bingpreview|headless|lighthouse|facebookexternalhit|curl\/|wget\/|python-requests|axios\/|monitoring|uptime|pagespeed|google-inspectiontool/i', $agent);
     }
+
+    /** Match canonical and browser URLs without being sensitive to a trailing slash. */
+    public static function paths_match($a,$b) {
+        $a=(string)$a;
+        $b=(string)$b;
+        $a=wp_parse_url($a,PHP_URL_PATH) ?: '/';
+        $b=wp_parse_url($b,PHP_URL_PATH) ?: '/';
+        return rtrim(rawurldecode($a),'/')===rtrim(rawurldecode($b),'/');
+    }
+    private static function valid_public_post($id,$path) {
+        $post=$id ? get_post($id) : false;
+        if (!$post || $post->post_status!=='publish' || !is_post_type_viewable($post->post_type)) {return false;}
+        $permalink=get_permalink($id);
+        // Plain ?p=123 URLs cannot be disambiguated after stripping query data.
+        if (!$permalink || wp_parse_url($permalink,PHP_URL_QUERY)) {return false;}
+        return self::paths_match($permalink,$path);
+    }
+    /** An ID from cached HTML is only a hint, not trusted attribution. */
+    public static function resolve_post_id($path,$hint=0) {
+        $hint=absint($hint);
+        if ($hint && self::valid_public_post($hint,$path)) {return $hint;}
+        if (!function_exists('url_to_postid')) {return 0;}
+        $resolved=absint(url_to_postid(home_url($path)));
+        if (!$resolved && self::paths_match($path,home_url('/'))
+            && get_option('show_on_front')==='page') {
+            $resolved=absint(get_option('page_on_front'));
+        }
+        return self::valid_public_post($resolved,$path) ? $resolved : 0;
+    }
+    /**
+     * Re-attribute historical rows saved as post_id=0 in bounded batches.
+     * Other routes (archives, 404, external paths) remain unattributed.
+     */
+    public static function repair_attribution_batch($cursor=0,$limit=150) {
+        global $wpdb;
+        $limit=max(1,min(150,absint($limit)));
+        $cursor=$cursor ? absint($cursor) : PHP_INT_MAX;
+        $rows=$wpdb->get_results($wpdb->prepare(
+            'SELECT id, path FROM '.self::table().' WHERE post_id=0 AND id < %d ORDER BY id DESC LIMIT %d',
+            $cursor,$limit
+        ),ARRAY_A);
+        $grouped=array();
+        $last=$cursor;
+        foreach ((array)$rows as $row) {
+            $id=(int)$row['id'];
+            $last=min($last,$id);
+            $path=(string)$row['path'];
+            if (!isset($grouped[$path])) {$grouped[$path]=array();}
+            $grouped[$path][]=$id;
+        }
+        $fixed=0;
+        foreach ($grouped as $path=>$ids) {
+            $post_id=self::resolve_post_id($path);
+            if (!$post_id) {continue;}
+            $placeholders=implode(',',array_fill(0,count($ids),'%d'));
+            $args=array_merge(array($post_id),$ids);
+            $sql='UPDATE '.self::table().' SET post_id=%d WHERE post_id=0 AND id IN ('.$placeholders.')';
+            $count=$wpdb->query($wpdb->prepare($sql,...$args));
+            $fixed+=max(0,(int)$count);
+        }
+        return array('cursor'=>count((array)$rows)<$limit ? 0 : $last,
+            'examined'=>count((array)$rows),'fixed'=>$fixed);
+    }
     private static function clean_text($key, $max=80) {
         $value=isset($_POST[$key]) ? sanitize_text_field(wp_unslash($_POST[$key])) : '';
         return function_exists('mb_substr') ? mb_substr($value, 0, $max) : substr($value, 0, $max);
@@ -157,12 +220,8 @@ final class WPVS_Core {
         $refhost=wp_parse_url(esc_url_raw($referer),PHP_URL_HOST);
         $refhost=is_string($refhost)?substr(strtolower(sanitize_text_field($refhost)),0,190):'';
         $post_id=isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
-        if ($post_id) {
-            $p=get_post($post_id);
-            if (!$p || $p->post_status!=='publish' || !is_post_type_viewable($p->post_type)) { $post_id=0; }
-            // Do not allow a forged post ID for a different path.
-            elseif (rawurldecode((string)wp_parse_url(get_permalink($post_id),PHP_URL_PATH))!==rawurldecode($parsed)) { $post_id=0; }
-        }
+        // Cached HTML can send a stale or missing post ID.
+        $post_id=self::resolve_post_id($path,$post_id);
         list($device,$browser)=self::ua_info($ua);
         global $wpdb;
         $success=$wpdb->insert(self::table(),array(
