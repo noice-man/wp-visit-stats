@@ -2,12 +2,14 @@
 if (!defined('ABSPATH')) { exit; }
 final class WPVS_Admin {
     private static $counts=array();
+    private static $counts_loaded=false;
     public static function boot() {
         add_action('admin_menu',array(__CLASS__,'menu'));
         add_action('admin_enqueue_scripts',array(__CLASS__,'assets'));
         add_action('admin_post_wpvs_save_settings',array(__CLASS__,'save_settings'));
         add_action('restrict_manage_posts',array(__CLASS__,'list_period'));
         add_filter('the_posts',array(__CLASS__,'preload_counts'),10,2);
+        add_action('load-edit.php',array(__CLASS__,'repair_old_attribution'));
         add_filter('posts_clauses',array(__CLASS__,'sort_clauses'),20,2);
         add_filter('manage_posts_columns',array(__CLASS__,'columns'));
         add_filter('manage_pages_columns',array(__CLASS__,'columns'));
@@ -67,24 +69,94 @@ final class WPVS_Admin {
         echo '<input type="date" id="wpvs_to" name="wpvs_to" value="'.esc_attr($to).'" title="Статистика по" />';
         echo '<span class="wpvs-range-label">Статистика материалов</span>';
     }
-    public static function preload_counts($posts,$query) {
-        if (!is_admin() || !$query->is_main_query() || !$posts || !function_exists('get_current_screen')) { return $posts; }
-        $screen=get_current_screen();
-        if (!$screen || $screen->base!=='edit') { return $posts; }
-        $ids=array_values(array_unique(array_map(function($p){return (int)$p->ID;},$posts)));
-        if (!$ids) {return $posts;}
+    /** Restores links between historical pageviews and published posts in small batches. */
+    public static function repair_old_attribution() {
+        if (!current_user_can('edit_posts')) {return;}
+        // Low-bounded repair, performed before the list query so counts and sorting agree.
+        $cursor=(int)get_option('wpvs_attribution_cursor_v101',PHP_INT_MAX);
+        if ($cursor===0) {return;} // The existing historical scan finished.
+        $result=WPVS_Core::repair_attribution_batch($cursor,150);
+        if ($result['cursor']!==$cursor) {
+            update_option('wpvs_attribution_cursor_v101',$result['cursor'],false);
+        }
+    }
+    private static function permalink_paths($id) {
+        $url=get_permalink($id);
+        if (!$url || wp_parse_url($url,PHP_URL_QUERY)) {return array();}
+        $path=wp_parse_url($url,PHP_URL_PATH) ?: '/';
+        $decoded=rawurldecode($path);
+        $encoded=implode('/',array_map('rawurlencode',explode('/',$decoded)));
+        $variants=array();
+        foreach (array($path,$decoded,$encoded) as $variant) {
+            $base=rtrim($variant,'/');
+            if ($base==='') {$base='/';}
+            $variants[]=$base;
+            if ($base!=='/') {$variants[]=$base.'/';}
+        }
+        return array_values(array_unique($variants));
+    }
+    private static function load_counts($posts) {
+        $ids=array();
+        foreach ((array)$posts as $p) {
+            if (is_object($p) && isset($p->ID)) {$ids[]=(int)$p->ID;}
+        }
+        $ids=array_values(array_unique(array_filter($ids)));
+        if (!$ids) {return;}
         global $wpdb;
         list($from,$to)=self::dates();
-        $placeholders=implode(',',array_fill(0,count($ids),'%d'));
-        $sql='SELECT post_id, COUNT(*) views, COUNT(DISTINCT visitor_hash) visitors FROM '.WPVS_Core::table().
-            ' WHERE post_id IN ('.$placeholders.') AND local_day BETWEEN %s AND %s GROUP BY post_id';
-        $rows=$wpdb->get_results($wpdb->prepare($sql,...array_merge($ids,array($from,$to))),ARRAY_A);
+        // Include legacy rows that were recorded with post_id=0. CASE maps them
+        // to exactly one public permalink and counts distinct visitors correctly.
+        $path_owner=array();
+        foreach ($ids as $id) {
+            foreach (self::permalink_paths($id) as $path) {
+                if (!isset($path_owner[$path])) {$path_owner[$path]=$id;}
+            }
+        }
+        $args=array();
+        $by_id=array();
+        foreach ($path_owner as $path=>$id) {
+            if (!isset($by_id[$id])) {$by_id[$id]=array();}
+            $by_id[$id][]=$path;
+        }
+        $case=$by_id ? 'CASE' : 'post_id';
+        foreach ($by_id as $id=>$paths) {
+            $case.=' WHEN post_id=0 AND path IN ('.implode(',',array_fill(0,count($paths),'%s')).') THEN %d';
+            $args=array_merge($args,$paths,array($id));
+        }
+        if ($by_id) {$case.=' ELSE post_id END';}
+        $sql='SELECT '.$case.' effective_id, COUNT(*) views, COUNT(DISTINCT visitor_hash) visitors FROM '.WPVS_Core::table().
+            ' WHERE local_day BETWEEN %s AND %s AND (post_id IN ('.implode(',',array_fill(0,count($ids),'%d')).')';
+        $args=array_merge($args,array($from,$to),$ids);
+        if ($path_owner) {
+            $sql.=' OR (post_id=0 AND path IN ('.implode(',',array_fill(0,count($path_owner),'%s')).'))';
+            $args=array_merge($args,array_keys($path_owner));
+        }
+        $sql.=') GROUP BY effective_id';
+        $rows=$wpdb->get_results($wpdb->prepare($sql,...$args),ARRAY_A);
         self::$counts=array();
-        foreach ($rows as $row) { self::$counts[(int)$row['post_id']]=$row; }
+        foreach ((array)$rows as $row) {
+            $id=(int)$row['effective_id'];
+            self::$counts[$id]=array('views'=>(int)$row['views'],'visitors'=>(int)$row['visitors']);
+        }
+        self::$counts_loaded=true;
+    }
+    public static function preload_counts($posts,$query) {
+        if (!is_admin() || !$query->is_main_query() || !$posts || !function_exists('get_current_screen')) {return $posts;}
+        $screen=get_current_screen();
+        if (!$screen || $screen->base!=='edit') {return $posts;}
+        self::load_counts($posts);
         return $posts;
     }
     public static function cell($column,$post_id) {
-        if ($column!=='wpvs_visitors' && $column!=='wpvs_views') { return; }
+        if ($column!=='wpvs_visitors' && $column!=='wpvs_views') {return;}
+        // Some admin queries suppress the_posts or run before the screen is ready.
+        // Read the current list on first render, not one SQL query per table cell.
+        if (!self::$counts_loaded) {
+            global $wp_query;
+            $posts=isset($wp_query->posts) && is_array($wp_query->posts) ? $wp_query->posts : array();
+            if (!$posts) {$posts=array((object)array('ID'=>(int)$post_id));}
+            self::load_counts($posts);
+        }
         $metric=$column==='wpvs_views'?'views':'visitors';
         echo '<span class="wpvs-numeric">'.esc_html(number_format_i18n((int)(self::$counts[$post_id][$metric]??0))).'</span>';
     }

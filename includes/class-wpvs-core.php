@@ -120,7 +120,6 @@ final class WPVS_Core {
         if (!$agent) { return true; }
         return (bool)preg_match('/bot|spider|crawl|slurp|bingpreview|headless|lighthouse|facebookexternalhit|curl\/|wget\/|python-requests|axios\/|monitoring|uptime|pagespeed|google-inspectiontool/i', $agent);
     }
-
     /** Match canonical and browser URLs without being sensitive to a trailing slash. */
     public static function paths_match($a,$b) {
         $a=(string)$a;
@@ -137,7 +136,7 @@ final class WPVS_Core {
         if (!$permalink || wp_parse_url($permalink,PHP_URL_QUERY)) {return false;}
         return self::paths_match($permalink,$path);
     }
-    /** An ID from cached HTML is only a hint, not trusted attribution. */
+    /** An ID from cached HTML is only a hint, not a trusted attribution. */
     public static function resolve_post_id($path,$hint=0) {
         $hint=absint($hint);
         if ($hint && self::valid_public_post($hint,$path)) {return $hint;}
@@ -156,6 +155,8 @@ final class WPVS_Core {
     public static function repair_attribution_batch($cursor=0,$limit=150) {
         global $wpdb;
         $limit=max(1,min(150,absint($limit)));
+        // Scan newest entries first, so recent page metrics recover immediately.
+        // 0 marks the end of the one-off history scan.
         $cursor=$cursor ? absint($cursor) : PHP_INT_MAX;
         $rows=$wpdb->get_results($wpdb->prepare(
             'SELECT id, path FROM '.self::table().' WHERE post_id=0 AND id < %d ORDER BY id DESC LIMIT %d',
@@ -174,6 +175,7 @@ final class WPVS_Core {
         foreach ($grouped as $path=>$ids) {
             $post_id=self::resolve_post_id($path);
             if (!$post_id) {continue;}
+            // Update only examined primary keys, never an unbounded table-wide scan.
             $placeholders=implode(',',array_fill(0,count($ids),'%d'));
             $args=array_merge(array($post_id),$ids);
             $sql='UPDATE '.self::table().' SET post_id=%d WHERE post_id=0 AND id IN ('.$placeholders.')';
@@ -220,7 +222,8 @@ final class WPVS_Core {
         $refhost=wp_parse_url(esc_url_raw($referer),PHP_URL_HOST);
         $refhost=is_string($refhost)?substr(strtolower(sanitize_text_field($refhost)),0,190):'';
         $post_id=isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
-        // Cached HTML can send a stale or missing post ID.
+        // Do not trust the browser-supplied post ID. If a cached page carries
+        // a stale or missing ID, resolve the public permalink on the server.
         $post_id=self::resolve_post_id($path,$post_id);
         list($device,$browser)=self::ua_info($ua);
         global $wpdb;

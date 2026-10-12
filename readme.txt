@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,5 +26,10 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.0.1 =
+* Fix zero visitor and pageview columns on the WordPress post/page/CPT list screens.
+* Server-side permalink attribution even if cached pages send an outdated post ID.
+* Display legacy unassigned pageviews and incrementally recover their post IDs.
+
 = 1.0.0 =
 * Initial release.
