@@ -35,5 +35,5 @@ if ( is_readable( $puc_file ) ) {
         __FILE__,
         'wp-visit-stats'
     );
-    $puc_checker->getVcsApi()->enableReleaseAssets( '/^wp-visit-stats-v[0-9]+\\.[0-9]+\\.[0-9]+\\.zip$/i' );
+    $puc_checker->getVcsApi()->enableReleaseAssets( '/^wp-visit-stats-v[0-9]+\.[0-9]+\.[0-9]+\.zip$/i' );
 }
