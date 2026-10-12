@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,10 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.0.3 =
+* Add a Today date preset on the statistics dashboard.
+* Show interactive date and metric value tooltips on chart hover and keyboard focus.
+
 = 1.0.2 =
 * Add secure GitHub Releases update checks and one-click WordPress upgrades.
 * No changes to visitor tracking, reports, or stored statistics.
