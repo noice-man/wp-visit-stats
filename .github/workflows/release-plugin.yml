@@ -1,36 +1,92 @@
-name: Build WordPress plugin release
+name: Publish WP Visit Stats
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'wp-visit-stats.php'
+      - 'includes/**'
+      - 'assets/**'
+      - 'readme.txt'
+      - 'CHANGELOG.md'
+      - '.github/workflows/release-plugin.yml'
+  workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  package:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare and validate plugin ZIP
+        with:
+          fetch-depth: 0
+
+      - name: Check release version
+        id: version
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          VERSION="${TAG_NAME#v}"
-          test "${TAG_NAME}" != "${VERSION}" || { echo 'Expected tag vX.Y.Z'; exit 1; }
-          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
-          grep -Eq "^ \\* Version: ${VERSION}$" "wp-visit-stats.php" || { echo 'Plugin header version does not match tag'; exit 1; }
-          test -f "wp-visit-stats.php"
+          VERSION="$(sed -nE 's/^ \* Version: ([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' wp-visit-stats.php | head -n 1)"
+          test -n "$VERSION" || { echo 'Missing version'; exit 1; }
+          grep -Fqx "Stable tag: $VERSION" readme.txt || { echo 'readme.txt version mismatch'; exit 1; }
+          TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists: skipping"
+          else
+            if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+              echo "Tag $TAG exists but release does not: investigate before publishing"
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: PHP lint and regression tests
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          find . -name '*.php' -not -path './dist/*' -print0 | xargs -0 -n1 php -l
+          php tests/smoke.php
+          php tests/endpoint-smoke.php
+          php tests/admin-counts-smoke.php
+          php tests/repair-smoke.php
+          node tests/tracker-smoke.js
+
+      - name: Build installable plugin ZIP
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
           curl -fsSL --retry 3 https://github.com/YahnisElsts/plugin-update-checker/archive/refs/tags/v5.7.tar.gz -o /tmp/puc.tar.gz
           mkdir -p /tmp/puc-src
           tar -xzf /tmp/puc.tar.gz -C /tmp/puc-src
-          mkdir -p "/tmp/plugin-build/wp-visit-stats/plugin-update-checker"
-          cp -a /tmp/puc-src/plugin-update-checker-5.7/. "/tmp/plugin-build/wp-visit-stats/plugin-update-checker/"
-          test -f "/tmp/plugin-build/wp-visit-stats/plugin-update-checker/plugin-update-checker.php"
-          for file in *.php readme.txt includes assets languages templates; do
-            if test -e "$file"; then cp -a "$file" "/tmp/plugin-build/wp-visit-stats/"; fi
-          done
-          cd /tmp/plugin-build
-          zip -q -r "${GITHUB_WORKSPACE}/wp-visit-stats-${TAG_NAME}.zip" "wp-visit-stats"
-          cd "${GITHUB_WORKSPACE}"
-          gh release upload "${TAG_NAME}" "wp-visit-stats-${TAG_NAME}.zip" --clobber
+          PACKAGE="/tmp/wpvs-package/wp-visit-stats"
+          mkdir -p "$PACKAGE/plugin-update-checker"
+          cp -a /tmp/puc-src/plugin-update-checker-5.7/. "$PACKAGE/plugin-update-checker/"
+          test -f "$PACKAGE/plugin-update-checker/plugin-update-checker.php"
+          cp wp-visit-stats.php readme.txt README.md CHANGELOG.md LICENSE "$PACKAGE/"
+          cp -a assets includes docs "$PACKAGE/"
+          test -f "$PACKAGE/includes/class-wpvs-core.php"
+          test -f "$PACKAGE/assets/tracker.js"
+          (cd /tmp/wpvs-package && zip -qr "$GITHUB_WORKSPACE/wp-visit-stats-v$VERSION.zip" wp-visit-stats)
+          unzip -tq "wp-visit-stats-v$VERSION.zip"
+
+      - name: Publish GitHub Release with ZIP asset
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "wp-visit-stats-v$VERSION.zip" \
+            --target "$GITHUB_SHA" \
+            --title "WP Visit Stats $TAG" \
+            --generate-notes
