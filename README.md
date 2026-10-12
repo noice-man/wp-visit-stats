@@ -4,12 +4,27 @@
 
 Плагин не требует внешней аналитической платформы, ключей API или CDN: браузерный скрипт отправляет события в WordPress, где они сохраняются в собственной таблице базы данных.
 
-**Автор:** Valery Molodtsov · **Лицензия:** GPL-2.0-or-later · **Версия:** 1.0.3 · **WordPress:** 6.0+ · **PHP:** 7.4+
+**Автор:** Valery Molodtsov · **Лицензия:** GPL-2.0-or-later · **Версия:** 1.0.4 · **WordPress:** 6.0+ · **PHP:** 7.4+
 
 - **Страница плагина:** https://ворд-пресс.рф/plugins/wp-visit-stats/
 - **Подробная инструкция:** https://ворд-пресс.рф/solutions/wp-visit-stats-wordpress-setup/
 - **Исходники:** https://github.com/noice-man/wp-visit-stats
-- **Скачать релиз:** [https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.3.zip](https://github.com/noice-man/wp-visit-stats/releases/latest/download/wp-visit-stats-v1.0.3.zip)
+- **Скачать релиз:** [wp-visit-stats-v1.0.4.zip](https://github.com/noice-man/wp-visit-stats/releases/download/v1.0.4/wp-visit-stats-v1.0.4.zip)
+
+## Обновления через WPR Update Hub
+
+Начиная с **v1.0.4**, WP Visit Stats получает сведения об обновлениях через **WPR Update Hub** на [ворд-пресс.рф](https://ворд-пресс.рф/). В плагин встроен клиентский SDK v2 и штатный WordPress `Update URI`:
+
+```text
+https://xn----ctbgf6biedka.xn--p1ai/plugins/wp-visit-stats/
+```
+
+- Версии с поддержкой Hub распространяются через стандартный интерфейс **Плагины → Установленные плагины** и **Панель → Обновления**.
+- **Переход с v1.0.3 и более ранних версий необходимо выполнить вручную**, установив v1.0.4 ZIP поверх текущего плагина: прежняя версия могла использовать другую схему проверки обновлений и не умеет обращаться в WPR Update Hub.
+- Для автоматической доставки новых версий администратор **ворд-пресс.рф** должен зарегистрировать GitHub-источник `noice-man/wp-visit-stats`, выбрать файл `wp-visit-stats/wp-visit-stats.php`, убедиться, что [GitHub Release v1.0.4](https://github.com/noice-man/wp-visit-stats/releases/tag/v1.0.4) прошёл проверку и опубликован в Hub.
+- Клиент проверяет новые версии с кешированием; появление обновления может занять 12–18 часов с учётом WordPress Cron и кеша.
+- WordPress **не включает автообновления принудительно**: включите их самостоятельно в списке плагинов, если необходимо.
+- В **Настройки → Статистика WPR** можно *по желанию* включить передачу анонимной статистики установок. По умолчанию согласия нет; посещаемость сайта не передаётся.
 
 ## Исправление статистики материалов в версии 1.0.1
 
