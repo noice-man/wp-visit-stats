@@ -66,4 +66,12 @@ jobs:
           zip -qr "$GITHUB_WORKSPACE/wp-visit-stats-v$VERSION.zip" "wp-visit-stats"
           cd "$GITHUB_WORKSPACE"
           unzip -tq "wp-visit-stats-v$VERSION.zip"
-          gh release create "v$VERSION" "wp-visit-stats-v$VERSION.zip" --target "$GITHUB_SHA" --title "wp-visit-stats v$VERSION" --generate-notes
+          # Publish user-facing release notes from the current readme changelog,
+          # not GitHub's automatically generated commit list.
+          awk -v version="$VERSION" '
+            $0 == "= " version " =" {capture=1; next}
+            capture && /^= [0-9]+\.[0-9]+\.[0-9]+ =$/ {exit}
+            capture {print}
+          ' readme.txt > /tmp/wpr-release-notes.md
+          test -s /tmp/wpr-release-notes.md
+          gh release create "v$VERSION" "wp-visit-stats-v$VERSION.zip" --target "$GITHUB_SHA" --title "wp-visit-stats v$VERSION" --notes-file /tmp/wpr-release-notes.md
