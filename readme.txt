@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,11 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.0.8 =
+* Обновлено описание добровольной статистики установок: теперь прямо указано, что она помогает разработчику на ворд-пресс.рф видеть используемые версии и поддерживать безопасное обновление со старых выпусков.
+* Уточнено, какие сведения отправляются, как часто, что происходит после отказа и почему отказ не влияет на получение обновлений.
+* Сохранён SDK 1.1.2: ручная проверка обновлений получает свежие метаданные, фоновые запросы используют кеш.
+
 = 1.0.7 =
 * WPR Updates Client SDK 1.1.2: refresh Hub metadata during explicit WordPress manual update checks while retaining background caching and ETag.
 
