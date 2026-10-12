@@ -11,7 +11,8 @@ final class WPVS_Core {
 
     public static function defaults() {
         return array('enabled'=>1, 'exclude_logged_in'=>1, 'respect_dnt'=>1,
-            'consent_required'=>0, 'retention_days'=>180, 'exclude_bots'=>1);
+            'consent_required'=>0, 'retention_days'=>180, 'exclude_bots'=>1,
+            'goal_tracking'=>1, 'mirror_metrika'=>0);
     }
     public static function options() {
         return wp_parse_args((array)get_option(self::OPTIONS, array()), self::defaults());
@@ -46,6 +47,7 @@ final class WPVS_Core {
             KEY created_at (created_at)
         ) {$charset};");
         if (!get_option(self::OPTIONS)) { add_option(self::OPTIONS, self::defaults(), '', false); }
+        WPVS_Goals::install();
         self::schedule();
     }
     public static function deactivate() { wp_clear_scheduled_hook('wpvs_cleanup'); }
@@ -63,6 +65,10 @@ final class WPVS_Core {
         add_action('wp_ajax_nopriv_' . self::AJAX_OPTOUT, array(__CLASS__,'optout'));
         add_action('wp_ajax_' . self::AJAX_OPTOUT, array(__CLASS__,'optout'));
         add_action('wpvs_cleanup', array(__CLASS__,'cleanup'));
+        add_action('wpvs_cleanup', array('WPVS_Goals','cleanup'));
+        add_action('init', array('WPVS_Goals','maybe_install'));
+        add_action('wp_ajax_nopriv_wpvs_goal', array('WPVS_Goals','track'));
+        add_action('wp_ajax_wpvs_goal', array('WPVS_Goals','track'));
         add_filter('cron_schedules', array(__CLASS__,'cron_schedules'));
         self::schedule();
     }
@@ -71,12 +77,13 @@ final class WPVS_Core {
         $o=self::options();
         if (!$o['enabled'] || is_admin() || is_preview() || is_feed() || (int)is_404()) { return; }
         if ($o['exclude_logged_in'] && is_user_logged_in()) { return; }
-        wp_enqueue_script('wpvs-tracker', WPVS_URL.'assets/tracker.js', array(), WPVS_VERSION, true);
+        wp_enqueue_script('wpvs-tracker', WPVS_URL.'assets/tracker.js', array(), WPVS_VERSION, false);
         $post_id=is_singular() ? get_queried_object_id() : 0;
         if ($post_id && !get_post_status($post_id)) { $post_id=0; }
         wp_add_inline_script('wpvs-tracker', 'window.WPVS_CONFIG='.wp_json_encode(array(
             'endpoint'=>admin_url('admin-ajax.php'), 'postId'=>(int)$post_id,
-            'respectDnt'=>(bool)$o['respect_dnt'], 'requireConsent'=>(bool)$o['consent_required']
+            'respectDnt'=>(bool)$o['respect_dnt'], 'requireConsent'=>(bool)$o['consent_required'],
+            'goalTracking'=>(bool)$o['goal_tracking'], 'mirrorMetrika'=>(bool)$o['mirror_metrika']
         )).';', 'before');
     }
     private static function same_origin() {
@@ -244,6 +251,35 @@ final class WPVS_Core {
         if ($success===false) { self::fail('storage',500); }
         nocache_headers();
         wp_send_json_success(array('ok'=>true));
+    }
+    /** Shared privacy/identity policy for explicit and mirrored goals. */
+    public static function goal_context() {
+        if (($_SERVER['REQUEST_METHOD']??'') !== 'POST' || !self::same_origin()) {return new WP_Error('origin','Invalid origin');}
+        $o=self::options();
+        if (empty($o['enabled']) || empty($o['goal_tracking']) || (!empty($o['exclude_logged_in']) && is_user_logged_in())) {return new WP_Error('disabled','Goals disabled');}
+        if (!empty($o['consent_required']) && self::clean_text('consent',10) !== 'yes') {return new WP_Error('consent','Consent required');}
+        $ua=isset($_SERVER['HTTP_USER_AGENT'])?(string)wp_unslash($_SERVER['HTTP_USER_AGENT']):'';
+        if (!empty($o['exclude_bots']) && self::is_bot($ua)) {return new WP_Error('bot','Bot excluded');}
+        if (!empty($o['respect_dnt']) && ($_SERVER['HTTP_DNT']??'') === '1') {return new WP_Error('dnt','DNT');}
+        $ip=self::client_ip();
+        $key='wpvs_grl_'.substr(hash_hmac('sha256',$ip.'|'.$ua,wp_salt('nonce')),0,28);
+        $count=(int)get_transient($key);
+        if ($count >= 60) {return new WP_Error('rate','Rate limited');}
+        set_transient($key,$count+1,MINUTE_IN_SECONDS);
+        $visitor=self::safe_id(self::COOKIE_VISITOR);
+        $session=self::safe_id(self::COOKIE_SESSION);
+        if (!$visitor) {$visitor=bin2hex(random_bytes(16));}
+        if (!$session) {$session=bin2hex(random_bytes(16));}
+        $now=time();
+        self::send_cookie(self::COOKIE_VISITOR,$visitor,$now+180*DAY_IN_SECONDS);
+        self::send_cookie(self::COOKIE_SESSION,$session,$now+self::TIMEOUT);
+        $path=self::clean_text('path',255);
+        $parsed=wp_parse_url($path,PHP_URL_PATH);
+        if (!is_string($parsed) || !$parsed || $parsed[0] !== '/') {$parsed='/';}
+        $path=function_exists('mb_substr')?mb_substr($parsed,0,255):substr($parsed,0,255);
+        return array('time'=>$now, 'visitor_hash'=>self::visitor_hash($visitor),
+            'session_hash'=>self::visitor_hash($session), 'path'=>$path,
+            'post_id'=>self::resolve_post_id($path,isset($_POST['post_id'])?absint($_POST['post_id']):0));
     }
     public static function optout() {
         if (($_SERVER['REQUEST_METHOD']??'')!=='POST' || !self::same_origin()) { self::fail('origin'); }

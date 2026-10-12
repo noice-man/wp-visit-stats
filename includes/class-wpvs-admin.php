@@ -23,6 +23,7 @@ final class WPVS_Admin {
     }
     public static function menu() {
         add_menu_page('WP Visit Stats','Статистика визитов','manage_options','wp-visit-stats',array(__CLASS__,'dashboard'),'dashicons-chart-line',65);
+        add_submenu_page('wp-visit-stats','Цели','Цели','manage_options','wp-visit-stats-goals',array(__CLASS__,'goals'));
         add_submenu_page('wp-visit-stats','Настройки','Настройки','manage_options','wp-visit-stats-settings',array(__CLASS__,'settings'));
     }
     public static function assets($hook) {
@@ -236,6 +237,15 @@ final class WPVS_Admin {
         foreach ($days as $d) {echo '<tr><td>'.esc_html($d['date']).'</td><td>'.(int)$d['visitors'].'</td><td>'.(int)$d['sessions'].'</td><td>'.(int)$d['views'].'</td></tr>';}
         echo '</tbody></table></details></section>';
         wp_add_inline_script('wpvs-admin','window.WPVS_CHART='.wp_json_encode($days).';','before');
+        $goals=WPVS_Goals::overview($from,$to);
+        echo '<section class="wpvs-panel"><div class="wpvs-panel-top"><h2>Цели</h2><a class="button" href="'.esc_url(add_query_arg(array('page'=>'wp-visit-stats-goals','wpvs_from'=>$from,'wpvs_to'=>$to),admin_url('admin.php'))).'">Подробный отчёт</a></div>';
+        echo '<p class="description">Вызовы целей на сайте: события WP Visit Stats и зеркалированные вызовы JavaScript API Метрики. Это не подтверждение успешной обработки события Яндексом.</p>';
+        if (!$goals) {echo '<p>За выбранный период целей пока нет.</p>';} else {
+            echo '<table class="widefat striped"><thead><tr><th>Цель</th><th>Достижения</th><th>Сеансы</th><th>Посетители</th></tr></thead><tbody>';
+            foreach(array_slice($goals,0,12) as $g) {echo '<tr><td>'.esc_html($g['goal_name']).'</td><td>'.esc_html(number_format_i18n((int)$g['hits'])).'</td><td>'.esc_html(number_format_i18n((int)$g['sessions'])).'</td><td>'.esc_html(number_format_i18n((int)$g['visitors'])).'</td></tr>';}
+            echo '</tbody></table>';
+        }
+        echo '</section>';
         echo '<section class="wpvs-panel"><h2>Посещаемость материалов</h2><table class="widefat striped"><thead><tr><th>Материал</th><th>Посетители</th><th>Просмотры</th></tr></thead><tbody>';
         foreach (self::top_pages($from,$to) as $item) {
             $id=(int)$item['post_id'];
@@ -291,6 +301,32 @@ final class WPVS_Admin {
         echo '<p><a href="'.esc_url(admin_url('admin.php?page=wp-visit-stats-settings')).'">Настройки</a> · <a target="_blank" rel="noopener noreferrer" href="https://ворд-пресс.рф/solutions/wp-visit-stats-wordpress-setup/">Инструкция</a></p>';
         echo '</div>';
     }
+    public static function goals() {
+        if (!current_user_can('manage_options')) {wp_die(esc_html__('Недостаточно прав.'));}
+        list($from,$to)=self::dates();
+        $raw=isset($_GET['wpvs_goal'])?sanitize_text_field(wp_unslash($_GET['wpvs_goal'])):'';
+        $selected=WPVS_Goals::valid_goal($raw)?$raw:'';
+        $items=WPVS_Goals::overview($from,$to);
+        echo '<div class="wrap wpvs-wrap"><h1>WP Visit Stats — цели</h1>';
+        echo '<p class="description">Учитываются события, полученные нашим сервером, а не подтверждённые конверсии Яндекс Метрики. Уникальность сеансов и посетителей — по cookie WP Visit Stats.</p>';
+        echo '<form class="wpvs-filter" method="get"><input type="hidden" name="page" value="wp-visit-stats-goals" />';
+        echo '<label>С <input type="date" name="wpvs_from" value="'.esc_attr($from).'" required /></label>';
+        echo '<label>По <input type="date" name="wpvs_to" value="'.esc_attr($to).'" required /></label>';
+        echo '<label>Цель <select name="wpvs_goal"><option value="">Все</option>';
+        foreach($items as $g) {echo '<option value="'.esc_attr($g['goal_name']).'" '.selected($selected,$g['goal_name'],false).'>'.esc_html($g['goal_name']).'</option>';}
+        echo '</select></label><button class="button button-primary">Показать</button></form>';
+        echo '<section class="wpvs-panel"><h2>Достижения за период</h2><table class="widefat striped"><thead><tr><th>Цель</th><th>Достижения</th><th>Сеансы</th><th>Посетители</th><th>Последнее событие (UTC)</th></tr></thead><tbody>';
+        foreach ($items as $g) {echo '<tr><td>'.esc_html($g['goal_name']).'</td><td>'.esc_html(number_format_i18n((int)$g['hits'])).'</td><td>'.esc_html(number_format_i18n((int)$g['sessions'])).'</td><td>'.esc_html(number_format_i18n((int)$g['visitors'])).'</td><td>'.esc_html($g['last_hit']).'</td></tr>';}
+        if (!$items) {echo '<tr><td colspan="5">События не обнаружены.</td></tr>';}
+        echo '</tbody></table></section>';
+        echo '<section class="wpvs-panel"><h2>Способ регистрации</h2><table class="widefat striped"><thead><tr><th>Источник</th><th>Счётчик Метрики</th><th>События</th></tr></thead><tbody>';
+        foreach(WPVS_Goals::by_source($from,$to) as $source) {echo '<tr><td>'.esc_html($source['source']==='metrika'?'Зеркалирование Метрики':'Собственное событие').'</td><td>'.esc_html($source['counter_id'] ?: '—').'</td><td>'.esc_html(number_format_i18n((int)$source['hits'])).'</td></tr>';}
+        echo '</tbody></table></section>';
+        echo '<section class="wpvs-panel"><h2>Динамика целей по дням</h2><table class="widefat striped"><thead><tr><th>Дата</th><th>Достижения</th><th>Сеансы с целью</th></tr></thead><tbody>';
+        foreach(WPVS_Goals::by_day($from,$to,$selected) as $day) {echo '<tr><td>'.esc_html($day['day']).'</td><td>'.esc_html(number_format_i18n((int)$day['hits'])).'</td><td>'.esc_html(number_format_i18n((int)$day['sessions'])).'</td></tr>';}
+        echo '</tbody></table><p class="description">При выборе «Все» число сеансов считается уникально за день по всем целям, а не суммируется по отдельным целям.</p></section>';
+        echo '<p><a href="'.esc_url(admin_url('admin.php?page=wp-visit-stats-settings')).'">Настройки целей и зеркалирования</a></p></div>';
+    }
     public static function settings() {
         if (!current_user_can('manage_options')) { wp_die(esc_html__('Недостаточно прав.')); }
         $o=WPVS_Core::options();
@@ -299,14 +335,15 @@ final class WPVS_Admin {
         echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'"><input type="hidden" name="action" value="wpvs_save_settings" />';
         wp_nonce_field('wpvs_save_settings');
         echo '<table class="form-table" role="presentation">';
-        $flags=array('enabled'=>'Включить сбор статистики','exclude_logged_in'=>'Не учитывать авторизованных пользователей','exclude_bots'=>'Исключать известные боты','respect_dnt'=>'Уважать сигнал Do Not Track','consent_required'=>'Собирать статистику только после согласия пользователя');
+        $flags=array('enabled'=>'Включить сбор статистики','exclude_logged_in'=>'Не учитывать авторизованных пользователей','exclude_bots'=>'Исключать известные боты','respect_dnt'=>'Уважать сигнал Do Not Track','consent_required'=>'Собирать статистику только после согласия пользователя', 'goal_tracking'=>'Учитывать цели WP Visit Stats', 'mirror_metrika'=>'Зеркалировать вызовы ym(..., reachGoal, ...) из Яндекс Метрики');
         foreach ($flags as $key=>$label) {
             echo '<tr><th scope="row">'.esc_html($label).'</th><td><label><input type="checkbox" name="'.esc_attr($key).'" value="1" '.checked(!empty($o[$key]),true,false).' /> Включено</label></td></tr>';
         }
         echo '<tr><th scope="row"><label for="wpvs_retention">Хранение событий</label></th><td><input type="number" id="wpvs_retention" min="7" max="730" name="retention_days" value="'.esc_attr((int)$o['retention_days']).'" /> дней <p class="description">По умолчанию 180. Очистка работает через WP-Cron и не требует внешнего сервиса.</p></td></tr>';
+        echo '<tr><td colspan="2"><p class="description">Зеркалирование по умолчанию отключено. Перехват только публичных вызовов <code>ym(..., \'reachGoal\', ...)</code>; параметры цели (включая email, суммы и персональные данные) не копируются. В зависимости от порядка загрузки скриптов некоторые вызовы могут быть пропущены. Автоматические цели Метрики (например, клики/скроллы) не зеркалируются.</p></td></tr>';
         echo '</table><p class="submit"><button type="submit" class="button button-primary">Сохранить настройки</button></p></form>';
-        echo '<div class="wpvs-panel"><h2>Согласие и конфиденциальность</h2><p>Плагин использует first-party cookie посетителя и сеанса, фиксирует путь страницы, домен источника, UTM и категории устройства/браузера. Сырые IP-адреса и User-Agent не сохраняются.</p>';
-        echo '<p>При включении требования согласия запись начинается только после вызова <code>window.WPVisitStats.grantConsent()</code> в браузере. Для отзыва согласия: <code>window.WPVisitStats.denyConsent()</code>. Подключите эти вызовы к собственному баннеру согласия. Без этой интеграции при требовании согласия событий не будет.</p>';
+        echo '<div class="wpvs-panel"><h2>Согласие и конфиденциальность</h2><p>Плагин использует first-party cookie посетителя и сеанса, фиксирует путь страницы, домен источника, UTM и категории устройства/браузера. Сырые IP-адреса и User-Agent не сохраняются. Для целей дополнительно сохраняются только код цели, номер счётчика и признак источника без параметров <code>reachGoal</code>.</p>';
+        echo '<p>При включении требования согласия запись начинается только после вызова <code>window.WPVisitStats.grantConsent()</code> в браузере. Для отзыва согласия: <code>window.WPVisitStats.denyConsent()</code>. Для собственной цели: <code>window.WPVisitStats.goal(\'zayavka\')</code>. Подключите эти вызовы к собственному баннеру согласия. Без этой интеграции при требовании согласия событий не будет.</p>';
         echo '<p>Отзыв согласия останавливает будущий сбор и удаляет браузерные идентификаторы. Ранее собранные события остаются до окончания установленного срока хранения.</p>';
         echo '<p><a href="https://ворд-пресс.рф/solutions/wp-visit-stats-wordpress-setup/" target="_blank" rel="noopener noreferrer">Подробная инструкция на ворд-пресс.рф</a></p></div></div>';
     }
@@ -314,7 +351,7 @@ final class WPVS_Admin {
         if (!current_user_can('manage_options')) {wp_die('Недостаточно прав',403);}
         check_admin_referer('wpvs_save_settings');
         $opts=array();
-        foreach(array('enabled','exclude_logged_in','exclude_bots','respect_dnt','consent_required') as $key){$opts[$key]=empty($_POST[$key])?0:1;}
+        foreach(array('enabled','exclude_logged_in','exclude_bots','respect_dnt','consent_required','goal_tracking','mirror_metrika') as $key){$opts[$key]=empty($_POST[$key])?0:1;}
         $opts['retention_days']=max(7,min(730,isset($_POST['retention_days'])?absint($_POST['retention_days']):180));
         update_option(WPVS_Core::OPTIONS,$opts,false);
         wp_safe_redirect(add_query_arg('updated',1,admin_url('admin.php?page=wp-visit-stats-settings')));

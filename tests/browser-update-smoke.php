@@ -39,7 +39,7 @@ $state=(object)array('response'=>array(),'no_update'=>array());
 foreach($GLOBALS['filters']['site_transient_update_plugins'] as $handler){$state=$handler($state);}
 $key='wp-visit-stats/wp-visit-stats.php';
 $marked=$state->no_update[$key]??null;
-if(!$marked || $marked->new_version!=='1.0.5' || $marked->slug!=='wp-visit-stats') {throw new Exception('SDK no_update support missing');}
+if(!$marked || $marked->new_version!=='1.0.6' || $marked->slug!=='wp-visit-stats') {throw new Exception('SDK no_update support missing');}
 if(property_exists($marked,'autoupdate')){throw new Exception('SDK forced automatic updates');}
 $already=(object)array('response'=>array($key=>(object)array('new_version'=>'1.1.0')),'no_update'=>array());
 foreach($GLOBALS['filters']['site_transient_update_plugins'] as $handler){$already=$handler($already);}
