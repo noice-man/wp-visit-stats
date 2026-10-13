@@ -1,6 +1,6 @@
 <?php
 /**
- * WPR Updates Client SDK 1.1.3 (clear telemetry explanation), WordPress >= 5.8, PHP >= 7.4.
+ * WPR Updates Client SDK 1.1.4 (display author from Hub or installed plugin), WordPress >= 5.8, PHP >= 7.4.
  * Public metadata updates with 12-18h jittered cache and ETag/304.
  * Explicitly opt-in anonymous usage telemetry, never auto-enabled.
  */
@@ -74,7 +74,7 @@ final class WPR_Updates_Client_V2 {
             $info=self::request($cfg);
             if ( !is_array($info) ) {return $result;}
             return (object)array('name'=>$info['name']??$cfg['slug'],'slug'=>$cfg['slug'],'version'=>$info['version'],
-                'author'=>'WPR','homepage'=>$info['homepage']??'','requires'=>$info['requires']??'',
+                'author'=>!empty($info['author']) ? wp_strip_all_tags((string)$info['author']) : wp_strip_all_tags((string)($installed[$cfg['basename']]['Author']??'WPR')),'homepage'=>$info['homepage']??'','requires'=>$info['requires']??'',
                 'tested'=>$info['tested']??'','requires_php'=>$info['requires_php']??'',
                 'download_link'=>$info['download_url'],'sections'=>(array)($info['sections']??array()));
         },15,3);
