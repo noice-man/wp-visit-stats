@@ -3,7 +3,7 @@ Contributors: noice-man
 Tags: analytics, visitors, statistics, pageviews, privacy
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.0.9
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -26,6 +26,11 @@ No. Tracking requires your WordPress server, PHP and database to work.
 Yes, use the consent_required option and the JavaScript API documented in docs/SETUP.md.
 
 == Changelog ==
+= 1.1.0 =
+* Add NDJSON export and additive, repeat-safe import for pageview and goal events across independent WordPress instances.
+* Add stable pseudonymous visitor/session keys and event IDs for cross-instance deduplication.
+* Preserve existing records; imported duplicates are skipped by unique event ID.
+
 = 1.0.9 =
 * Исправлен автор в окне обновления WordPress: показывается разработчик из заголовка плагина, а не служебное имя WPR.
 * Обновлена информация о версиях и их фактических изменениях. Механизм сбора статистики и структура базы данных не менялись.
