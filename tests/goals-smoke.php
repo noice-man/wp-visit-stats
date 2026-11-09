@@ -1,6 +1,7 @@
 <?php
 // Run: php tests/goals-smoke.php. No real WordPress, DB, or Yandex needed.
 define('ABSPATH',__DIR__.'/');
+function wp_generate_uuid4(){return '6e3c2ae4-c3c7-4d2c-980d-9b0e22f40119';}
 define('DAY_IN_SECONDS',86400);define('MINUTE_IN_SECONDS',60);
 class WP_Error {private $code;function __construct($code,$message){$this->code=$code;}function get_error_code(){return $this->code;}}
 class EndRequest extends Exception {public $code2;function __construct($code2){$this->code2=$code2;}}
