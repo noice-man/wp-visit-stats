@@ -27,6 +27,9 @@ final class WPVS_Core {
         $table=self::table(); $charset=$wpdb->get_charset_collate();
         dbDelta("CREATE TABLE {$table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            event_uid char(64) NULL DEFAULT NULL,
+            visitor_key char(64) NULL DEFAULT NULL,
+            session_key char(64) NULL DEFAULT NULL,
             created_at datetime NOT NULL,
             local_day date NOT NULL,
             visitor_hash char(64) NOT NULL,
@@ -40,6 +43,9 @@ final class WPVS_Core {
             device varchar(20) NOT NULL DEFAULT '',
             browser varchar(30) NOT NULL DEFAULT '',
             PRIMARY KEY  (id),
+            UNIQUE KEY event_uid (event_uid),
+            KEY visitor_key_day (visitor_key,local_day),
+            KEY session_key_day (session_key,local_day),
             KEY local_day (local_day),
             KEY post_day (post_id,local_day),
             KEY visitor_day (visitor_hash,local_day),
@@ -111,6 +117,25 @@ final class WPVS_Core {
     }
     private static function visitor_hash($id) {
         return hash_hmac('sha256', $id, wp_salt('auth'));
+    }
+    /** Pseudonymous cross-instance keys derived from first-party random cookie IDs. */
+    public static function stable_key($id, $kind) {
+        return hash('sha256', 'wpvs-v1:' . $kind . ':' . $id);
+    }
+    /** Link legacy HMAC identities to portable keys, including earlier goal events. */
+    private static function link_legacy_rows($visitor_hash, $session_hash, $visitor_key, $session_key) {
+        if (get_option('wpvs_transfer_schema_version') !== '1') { return; }
+        global $wpdb;
+        foreach (array(self::table(), WPVS_Goals::table()) as $table) {
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET visitor_key=%s WHERE visitor_hash=%s AND (visitor_key IS NULL OR LENGTH(visitor_key)=0)",
+                $visitor_key, $visitor_hash
+            ));
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET session_key=%s WHERE session_hash=%s AND (session_key IS NULL OR LENGTH(session_key)=0)",
+                $session_key, $session_hash
+            ));
+        }
     }
     private static function ua_info($agent) {
         $ua=strtolower($agent);
@@ -221,6 +246,11 @@ final class WPVS_Core {
         $session=self::safe_id(self::COOKIE_SESSION);
         if (!$session) { $session=bin2hex(random_bytes(16)); }
         $now=time();
+        $visitor_hash=self::visitor_hash($visitor);
+        $session_hash=self::visitor_hash($session);
+        $visitor_key=self::stable_key($visitor,'visitor');
+        $session_key=self::stable_key($session,'session');
+        self::link_legacy_rows($visitor_hash,$session_hash,$visitor_key,$session_key);
         // Refresh session cookie on activity; inactivity for 30 min starts a new session.
         self::send_cookie(self::COOKIE_VISITOR,$visitor,$now+180*DAY_IN_SECONDS);
         self::send_cookie(self::COOKIE_SESSION,$session,$now+self::TIMEOUT);
@@ -238,16 +268,19 @@ final class WPVS_Core {
         list($device,$browser)=self::ua_info($ua);
         global $wpdb;
         $success=$wpdb->insert(self::table(),array(
+            'event_uid'=>hash('sha256',wp_generate_uuid4()),
+            'visitor_key'=>$visitor_key,
+            'session_key'=>$session_key,
             'created_at'=>gmdate('Y-m-d H:i:s',$now),
             'local_day'=>wp_date('Y-m-d',$now),
-            'visitor_hash'=>self::visitor_hash($visitor),
-            'session_hash'=>self::visitor_hash($session),
+            'visitor_hash'=>$visitor_hash,
+            'session_hash'=>$session_hash,
             'post_id'=>$post_id,'path'=>$path,'ref_domain'=>$refhost,
             'utm_source'=>self::clean_text('utm_source',80),
             'utm_medium'=>self::clean_text('utm_medium',80),
             'utm_campaign'=>self::clean_text('utm_campaign',120),
             'device'=>$device,'browser'=>$browser
-        ),array('%s','%s','%s','%s','%d','%s','%s','%s','%s','%s','%s','%s'));
+        ),array('%s','%s','%s','%s','%s','%s','%s','%d','%s','%s','%s','%s','%s','%s','%s'));
         if ($success===false) { self::fail('storage',500); }
         nocache_headers();
         wp_send_json_success(array('ok'=>true));
@@ -271,14 +304,20 @@ final class WPVS_Core {
         if (!$visitor) {$visitor=bin2hex(random_bytes(16));}
         if (!$session) {$session=bin2hex(random_bytes(16));}
         $now=time();
+        $visitor_hash=self::visitor_hash($visitor);
+        $session_hash=self::visitor_hash($session);
+        $visitor_key=self::stable_key($visitor,'visitor');
+        $session_key=self::stable_key($session,'session');
+        self::link_legacy_rows($visitor_hash,$session_hash,$visitor_key,$session_key);
         self::send_cookie(self::COOKIE_VISITOR,$visitor,$now+180*DAY_IN_SECONDS);
         self::send_cookie(self::COOKIE_SESSION,$session,$now+self::TIMEOUT);
         $path=self::clean_text('path',255);
         $parsed=wp_parse_url($path,PHP_URL_PATH);
         if (!is_string($parsed) || !$parsed || $parsed[0] !== '/') {$parsed='/';}
         $path=function_exists('mb_substr')?mb_substr($parsed,0,255):substr($parsed,0,255);
-        return array('time'=>$now, 'visitor_hash'=>self::visitor_hash($visitor),
-            'session_hash'=>self::visitor_hash($session), 'path'=>$path,
+        return array('time'=>$now, 'visitor_hash'=>$visitor_hash,
+            'session_hash'=>$session_hash, 'visitor_key'=>$visitor_key,
+            'session_key'=>$session_key, 'path'=>$path,
             'post_id'=>self::resolve_post_id($path,isset($_POST['post_id'])?absint($_POST['post_id']):0));
     }
     public static function optout() {

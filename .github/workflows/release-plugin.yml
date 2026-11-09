@@ -28,6 +28,17 @@ jobs:
           VERSION="$(sed -nE 's/^ \* Version: ([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' wp-visit-stats.php | head -n1)"
           test -n "$VERSION"
           grep -Fqx "Stable tag: $VERSION" readme.txt
+          test -f includes/class-wpvs-transfer.php
+          find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+          php tests/smoke.php
+          php tests/endpoint-smoke.php
+          php tests/admin-counts-smoke.php
+          php tests/repair-smoke.php
+          php tests/traffic-sources-smoke.php
+          php tests/browser-update-smoke.php
+          php tests/goals-smoke.php
+          php tests/transfer-smoke.php
+          node tests/tracker-smoke.js
           test -f includes/wpr-updates-client.php
           php -l wp-visit-stats.php
           php -l includes/wpr-updates-client.php

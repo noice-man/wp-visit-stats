@@ -11,6 +11,9 @@ final class WPVS_Goals {
         $table=self::table(); $charset=$wpdb->get_charset_collate();
         dbDelta("CREATE TABLE {$table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            event_uid char(64) NULL DEFAULT NULL,
+            visitor_key char(64) NULL DEFAULT NULL,
+            session_key char(64) NULL DEFAULT NULL,
             created_at datetime NOT NULL,
             local_day date NOT NULL,
             visitor_hash char(64) NOT NULL,
@@ -21,6 +24,9 @@ final class WPVS_Goals {
             counter_id bigint(20) unsigned NOT NULL DEFAULT 0,
             source varchar(12) NOT NULL DEFAULT 'manual',
             PRIMARY KEY  (id),
+            UNIQUE KEY event_uid (event_uid),
+            KEY visitor_key_day (visitor_key,local_day),
+            KEY session_key_day (session_key,local_day),
             KEY goal_day (goal_name,local_day),
             KEY session_day (session_hash,local_day),
             KEY local_day (local_day),
@@ -51,13 +57,16 @@ final class WPVS_Goals {
         if (!preg_match('/^[0-9]{1,12}$/D',$counter)) {wp_send_json_error(array('message'=>'counter_id'),400);return;}
         global $wpdb;
         $ok=$wpdb->insert(self::table(),array(
+            'event_uid'=>hash('sha256',wp_generate_uuid4()),
+            'visitor_key'=>$context['visitor_key'],
+            'session_key'=>$context['session_key'],
             'created_at'=>gmdate('Y-m-d H:i:s',$context['time']),
             'local_day'=>wp_date('Y-m-d',$context['time']),
             'visitor_hash'=>$context['visitor_hash'],
             'session_hash'=>$context['session_hash'],
             'post_id'=>$context['post_id'],'path'=>$context['path'],
             'goal_name'=>$goal, 'counter_id'=>(int)$counter,'source'=>$source
-        ),array('%s','%s','%s','%s','%d','%s','%s','%d','%s'));
+        ),array('%s','%s','%s','%s','%s','%s','%s','%d','%s','%s','%d','%s'));
         if ($ok===false) {wp_send_json_error(array('message'=>'storage'),500);return;}
         nocache_headers();
         wp_send_json_success(array('ok'=>true));
@@ -75,7 +84,7 @@ final class WPVS_Goals {
     public static function overview($from,$to) {
         global $wpdb;
         return (array)$wpdb->get_results($wpdb->prepare(
-            'SELECT goal_name,COUNT(*) hits,COUNT(DISTINCT session_hash) sessions,COUNT(DISTINCT visitor_hash) visitors,MAX(created_at) last_hit FROM '.self::table().' WHERE local_day BETWEEN %s AND %s GROUP BY goal_name ORDER BY hits DESC LIMIT 300',$from,$to
+            'SELECT goal_name,COUNT(*) hits,COUNT(DISTINCT COALESCE(session_key,session_hash)) sessions,COUNT(DISTINCT COALESCE(visitor_key,visitor_hash)) visitors,MAX(created_at) last_hit FROM '.self::table().' WHERE local_day BETWEEN %s AND %s GROUP BY goal_name ORDER BY hits DESC LIMIT 300',$from,$to
         ),ARRAY_A);
     }
     public static function by_source($from,$to) {
@@ -87,8 +96,8 @@ final class WPVS_Goals {
     public static function by_day($from,$to,$goal='') {
         global $wpdb;
         if ($goal && self::valid_goal($goal)) {
-            return (array)$wpdb->get_results($wpdb->prepare('SELECT local_day day,COUNT(*) hits,COUNT(DISTINCT session_hash) sessions FROM '.self::table().' WHERE local_day BETWEEN %s AND %s AND goal_name=%s GROUP BY local_day ORDER BY local_day',$from,$to,$goal),ARRAY_A);
+            return (array)$wpdb->get_results($wpdb->prepare('SELECT local_day day,COUNT(*) hits,COUNT(DISTINCT COALESCE(session_key,session_hash)) sessions FROM '.self::table().' WHERE local_day BETWEEN %s AND %s AND goal_name=%s GROUP BY local_day ORDER BY local_day',$from,$to,$goal),ARRAY_A);
         }
-        return (array)$wpdb->get_results($wpdb->prepare('SELECT local_day day,COUNT(*) hits,COUNT(DISTINCT session_hash) sessions FROM '.self::table().' WHERE local_day BETWEEN %s AND %s GROUP BY local_day ORDER BY local_day',$from,$to),ARRAY_A);
+        return (array)$wpdb->get_results($wpdb->prepare('SELECT local_day day,COUNT(*) hits,COUNT(DISTINCT COALESCE(session_key,session_hash)) sessions FROM '.self::table().' WHERE local_day BETWEEN %s AND %s GROUP BY local_day ORDER BY local_day',$from,$to),ARRAY_A);
     }
 }

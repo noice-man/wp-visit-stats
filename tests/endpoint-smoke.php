@@ -2,6 +2,7 @@
 // Run: php tests/endpoint-smoke.php — WordPress API mocks, no database required.
 error_reporting(E_ALL);
 define('ABSPATH',__DIR__.'/');
+function wp_generate_uuid4(){return '6e3c2ae4-c3c7-4d2c-980d-9b0e22f40119';}
 define('DAY_IN_SECONDS',86400);
 define('MINUTE_IN_SECONDS',60);
 class ResultException extends Exception {public $status; public $response; function __construct($status,$response){$this->status=$status;$this->response=$response;parent::__construct($status);}}

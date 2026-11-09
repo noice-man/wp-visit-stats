@@ -1,0 +1,20 @@
+name: Validate WP Visit Stats
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/mergeable-export-import]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PHP syntax
+        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+      - name: Run regression tests
+        run: |
+          set -euo pipefail
+          for f in tests/*.php; do php "$f"; done
+          for f in tests/*.js; do node "$f"; done
