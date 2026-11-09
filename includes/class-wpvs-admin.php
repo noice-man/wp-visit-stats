@@ -126,7 +126,7 @@ final class WPVS_Admin {
             $args=array_merge($args,$paths,array($id));
         }
         if ($by_id) {$case.=' ELSE post_id END';}
-        $sql='SELECT '.$case.' effective_id, COUNT(*) views, COUNT(DISTINCT COALESCE(NULLIF(visitor_key,''),visitor_hash)) visitors FROM '.WPVS_Core::table().
+        $sql='SELECT '.$case.' effective_id, COUNT(*) views, COUNT(DISTINCT COALESCE(visitor_key,visitor_hash)) visitors FROM '.WPVS_Core::table().
             ' WHERE local_day BETWEEN %s AND %s AND (post_id IN ('.implode(',',array_fill(0,count($ids),'%d')).')';
         $args=array_merge($args,array($from,$to),$ids);
         if ($path_owner) {
@@ -180,11 +180,11 @@ final class WPVS_Admin {
     }
     private static function summary($from,$to) {
         global $wpdb;
-        return $wpdb->get_row($wpdb->prepare('SELECT COUNT(DISTINCT COALESCE(NULLIF(visitor_key,''),visitor_hash)) visitors, COUNT(DISTINCT COALESCE(NULLIF(session_key,''),session_hash)) sessions, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s',$from,$to),ARRAY_A);
+        return $wpdb->get_row($wpdb->prepare('SELECT COUNT(DISTINCT COALESCE(visitor_key,visitor_hash)) visitors, COUNT(DISTINCT COALESCE(session_key,session_hash)) sessions, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s',$from,$to),ARRAY_A);
     }
     private static function by_day($from,$to) {
         global $wpdb;
-        $rows=$wpdb->get_results($wpdb->prepare('SELECT local_day, COUNT(DISTINCT COALESCE(NULLIF(visitor_key,''),visitor_hash)) visitors, COUNT(DISTINCT COALESCE(NULLIF(session_key,''),session_hash)) sessions, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s GROUP BY local_day ORDER BY local_day ASC',$from,$to),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare('SELECT local_day, COUNT(DISTINCT COALESCE(visitor_key,visitor_hash)) visitors, COUNT(DISTINCT COALESCE(session_key,session_hash)) sessions, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s GROUP BY local_day ORDER BY local_day ASC',$from,$to),ARRAY_A);
         $indexed=array(); foreach($rows as $row){ $indexed[$row['local_day']]=$row; }
         $days=array(); $dt=new DateTimeImmutable($from,wp_timezone()); $end=new DateTimeImmutable($to,wp_timezone());
         for($i=0;$dt<=$end && $i<365;$i++,$dt=$dt->modify('+1 day')){
@@ -195,7 +195,7 @@ final class WPVS_Admin {
     }
     private static function top_pages($from,$to) {
         global $wpdb;
-        return $wpdb->get_results($wpdb->prepare('SELECT post_id, COUNT(DISTINCT COALESCE(NULLIF(visitor_key,''),visitor_hash)) visitors, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s AND post_id > 0 GROUP BY post_id ORDER BY views DESC LIMIT 20',$from,$to),ARRAY_A);
+        return $wpdb->get_results($wpdb->prepare('SELECT post_id, COUNT(DISTINCT COALESCE(visitor_key,visitor_hash)) visitors, COUNT(*) views FROM '.WPVS_Core::table().' WHERE local_day BETWEEN %s AND %s AND post_id > 0 GROUP BY post_id ORDER BY views DESC LIMIT 20',$from,$to),ARRAY_A);
     }
     private static function breakdown($field,$from,$to) {
         global $wpdb;
