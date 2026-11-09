@@ -82,7 +82,7 @@ final class WPVS_Traffic {
         $sql="SELECT e.ref_domain, e.utm_source, e.utm_medium, COUNT(*) AS sessions
              FROM {$table} e INNER JOIN (
                  SELECT MIN(id) first_id FROM {$table}
-                 WHERE local_day BETWEEN %s AND %s GROUP BY session_hash
+                 WHERE local_day BETWEEN %s AND %s GROUP BY COALESCE(NULLIF(session_key,''),session_hash)
              ) first_hits ON first_hits.first_id=e.id
              GROUP BY e.ref_domain,e.utm_source,e.utm_medium";
         $rows=$wpdb->get_results($wpdb->prepare($sql,$from,$to),ARRAY_A);
