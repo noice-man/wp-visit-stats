@@ -16,7 +16,6 @@ final class WPVS_Transfer {
     public static function boot() {
         add_action('init', array(__CLASS__, 'maybe_install'), 20);
         if (is_admin()) {
-            add_action('admin_menu', array(__CLASS__, 'menu'));
             add_action('admin_post_wpvs_export_data', array(__CLASS__, 'export'));
             add_action('admin_post_wpvs_import_data', array(__CLASS__, 'import'));
         }
@@ -83,14 +82,14 @@ final class WPVS_Transfer {
             }
         }
 
-        // Existing rows receive deterministic IDs. Re-running this is safe.
-        $wpdb->query($wpdb->prepare(
-            "UPDATE {$table} SET event_uid = SHA2(CONCAT(%s, %s, id), 256) WHERE event_uid IS NULL OR event_uid = ''",
-            'wpvs-legacy:',
-            $instance . ':' . $kind . ':'
-        ));
-        $remaining = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE event_uid IS NULL OR event_uid = ''");
-        return $remaining === 0;
+        // Stable on database clones, but distinguishes diverging rows with the same AUTO_INCREMENT id.
+        // Only immutable properties enter the fingerprint (post_id is repaired over time).
+        $fingerprint = $kind === 'events'
+            ? "SHA2(CONCAT('wpvs-legacy-v2:events:',id,':',created_at,':',visitor_hash,':',session_hash,':',path,':',ref_domain,':',utm_source,':',utm_medium,':',utm_campaign),256)"
+            : "SHA2(CONCAT('wpvs-legacy-v2:goals:',id,':',created_at,':',visitor_hash,':',session_hash,':',path,':',goal_name,':',counter_id,':',source),256)";
+        $updated = $wpdb->query("UPDATE {$table} SET event_uid={$fingerprint} WHERE event_uid IS NULL");
+        if ($updated === false) { return false; }
+        return (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE event_uid IS NULL") === 0;
     }
 
     public static function maybe_install() {
@@ -107,8 +106,22 @@ final class WPVS_Transfer {
         return is_string($uid) && preg_match('/^[a-f0-9]{64}$/iD', $uid) === 1;
     }
 
-    public static function legacy_uid($source_instance, $kind, $source_row_id) {
-        return hash('sha256', 'wpvs-legacy:' . (string) $source_instance . ':' . (string) $kind . ':' . (int) $source_row_id);
+    public static function legacy_uid($source_instance, $kind, $source_row_id, $data=array()) {
+        $parts = array('wpvs-legacy-v2', $kind, (int) $source_row_id,
+            $data['created_at'] ?? '', $data['visitor_hash'] ?? '',
+            $data['session_hash'] ?? '', $data['path'] ?? '');
+        if ($kind === 'events') {
+            $parts = array_merge($parts, array(
+                $data['ref_domain'] ?? '', $data['utm_source'] ?? '',
+                $data['utm_medium'] ?? '', $data['utm_campaign'] ?? ''
+            ));
+        } else {
+            $parts = array_merge($parts, array(
+                $data['goal_name'] ?? '', $data['counter_id'] ?? 0,
+                $data['source'] ?? 'manual'
+            ));
+        }
+        return hash('sha256', implode(':', $parts));
     }
 
     private static function write_line($handle, $data) {
@@ -135,7 +148,7 @@ final class WPVS_Transfer {
                 $last_id = max($last_id, $source_id);
                 $uid = isset($row['event_uid']) ? strtolower((string) $row['event_uid']) : '';
                 if (!self::valid_uid($uid)) {
-                    $uid = self::legacy_uid($instance, $kind, $source_id);
+                    $uid = self::legacy_uid($instance, $kind, $source_id, $row);
                 }
                 unset($row['id']);
                 $row['event_uid'] = $uid;
@@ -218,7 +231,7 @@ final class WPVS_Transfer {
         $uid = isset($data['event_uid']) ? strtolower((string) $data['event_uid']) : '';
         if (!self::valid_uid($uid)) {
             if ((int) $source_row_id < 1) { return false; }
-            $uid = self::legacy_uid($source_instance, $kind, $source_row_id);
+            $uid = self::legacy_uid($source_instance, $kind, $source_row_id, $data);
         }
 
         $created_at = isset($data['created_at']) ? (string) $data['created_at'] : '';
@@ -306,10 +319,17 @@ final class WPVS_Transfer {
         }
 
         $values = array();
-        foreach ($columns as $column) { $values[] = $row[$column] ?? null; }
         $placeholders = array();
-        foreach ($formats as $format) { $placeholders[] = $format; }
-        $sql = 'INSERT IGNORE INTO ' . $table . ' (' . implode(',', $columns) . ') VALUES (' . implode(',', $placeholders) . ')';
+        foreach ($columns as $i => $column) {
+            if (!isset($row[$column])) {
+                $placeholders[] = 'NULL';
+            } else {
+                $placeholders[] = $formats[$i];
+                $values[] = $row[$column];
+            }
+        }
+        $sql = 'INSERT INTO ' . $table . ' (' . implode(',', $columns) . ') VALUES (' .
+            implode(',', $placeholders) . ') ON DUPLICATE KEY UPDATE event_uid=event_uid';
         $prepared = $wpdb->prepare($sql, ...$values);
         if (!is_string($prepared)) { return false; }
         $result = $wpdb->query($prepared);
