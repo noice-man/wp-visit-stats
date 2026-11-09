@@ -124,6 +124,7 @@ final class WPVS_Core {
     }
     /** Link legacy HMAC identities to portable keys, including earlier goal events. */
     private static function link_legacy_rows($visitor_hash, $session_hash, $visitor_key, $session_key) {
+        if (get_option('wpvs_transfer_schema_version') !== '1') { return; }
         global $wpdb;
         foreach (array(self::table(), WPVS_Goals::table()) as $table) {
             $wpdb->query($wpdb->prepare(
