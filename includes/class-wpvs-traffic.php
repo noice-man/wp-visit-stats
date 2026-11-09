@@ -79,13 +79,25 @@ final class WPVS_Traffic {
     public static function query($from,$to) {
         global $wpdb;
         $table=WPVS_Core::table();
+        // Imported records may have higher row IDs despite older timestamps.
+        // Attribute the session to its earliest recorded hit (UTC), not MIN(id).
         $sql="SELECT e.ref_domain, e.utm_source, e.utm_medium, COUNT(*) AS sessions
              FROM {$table} e INNER JOIN (
-                 SELECT MIN(id) first_id FROM {$table}
-                 WHERE local_day BETWEEN %s AND %s GROUP BY COALESCE(session_key,session_hash)
+                 SELECT MIN(x.id) first_id
+                 FROM {$table} x INNER JOIN (
+                     SELECT COALESCE(session_key,session_hash) session_identity,
+                            MIN(created_at) first_created
+                     FROM {$table}
+                     WHERE local_day BETWEEN %s AND %s
+                     GROUP BY COALESCE(session_key,session_hash)
+                 ) earliest
+                   ON COALESCE(x.session_key,x.session_hash)=earliest.session_identity
+                  AND x.created_at=earliest.first_created
+                 WHERE x.local_day BETWEEN %s AND %s
+                 GROUP BY earliest.session_identity
              ) first_hits ON first_hits.first_id=e.id
              GROUP BY e.ref_domain,e.utm_source,e.utm_medium";
-        $rows=$wpdb->get_results($wpdb->prepare($sql,$from,$to),ARRAY_A);
+        $rows=$wpdb->get_results($wpdb->prepare($sql,$from,$to,$from,$to),ARRAY_A);
         $host=wp_parse_url(home_url('/'),PHP_URL_HOST) ?: '';
         return self::aggregate((array)$rows,$host);
     }
